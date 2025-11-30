@@ -16,18 +16,20 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { UsersService } from './users.service';
 import { validate as isUUID } from 'uuid';
+import { uuid } from 'src/shared/types/uuid';
+import { User } from './models/user.interface';
 
 @Controller('user')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  getAll() {
+  getAll(): Omit<User, 'password'>[] {
     return this.usersService.findAll();
   }
 
   @Get(':id')
-  getOne(@Param('id') id: string) {
+  getOne(@Param('id') id: uuid): Omit<User, 'password'> {
     if (!isUUID(id)) {
       //TODO: replace with custom error class in next task
       throw new BadRequestException('Invalid uuid');
@@ -46,7 +48,7 @@ export class UsersController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateUserDto) {
+  create(@Body() dto: CreateUserDto): Omit<User, 'password'> {
     if (!dto || !dto.login || !dto.password) {
       //TODO
       throw new BadRequestException('Missing fields');
@@ -60,7 +62,10 @@ export class UsersController {
   }
 
   @Put(':id')
-  updatePassword(@Param('id') id: string, @Body() dto: UpdatePasswordDto) {
+  updatePassword(
+    @Param('id') id: uuid,
+    @Body() dto: UpdatePasswordDto,
+  ): Omit<User, 'password'> {
     if (!isUUID(id)) {
       //TODO!
       throw new BadRequestException('Invalid uuid');
@@ -88,7 +93,7 @@ export class UsersController {
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id: string) {
+  remove(@Param('id') id: uuid): void {
     if (!isUUID(id)) {
       //TODO
       throw new BadRequestException('Invalid uuid');
