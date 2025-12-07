@@ -21,7 +21,6 @@ export const ormConfig: DataSourceOptions = {
     TrackEntity,
     FavoritesEntity,
   ],
-  // migrations: [path.join(__dirname, '..', 'migrations', '*.{ts,js}')],
-  // migrationsRun: true,
-  synchronize: true,
+  migrations: [path.join(__dirname, '..', 'migrations', '*.{ts,js}')],
+  migrationsRun: true,
 };
