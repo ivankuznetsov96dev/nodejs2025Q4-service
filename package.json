@@ -26,7 +26,9 @@
     "typeorm:migration:run": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/data-source.ts",
     "typeorm:migration:revert": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:revert -d src/data-source.ts",
     "typeorm:schema:drop": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js schema:drop -d src/data-source.ts",
-    "typeorm:migration:fresh": "npm run typeorm:schema:drop && npm run typeorm:migration:run"
+    "typeorm:migration:fresh": "npm run typeorm:schema:drop && npm run typeorm:migration:run",
+    "docker:build": "docker build -t home-library-app .",
+    "docker:scan": "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image home-library-app"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.16",
