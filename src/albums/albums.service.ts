@@ -1,54 +1,66 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import { Album } from './models/album.interface';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Observable, from, map, switchMap, tap, throwError } from 'rxjs';
+import { AlbumEntity } from './entities/album.entity';
 import { uuid } from 'src/shared/types/uuid';
 
 @Injectable()
 export class AlbumsService {
-  private albums: Album[] = [];
+  constructor(
+    @InjectRepository(AlbumEntity)
+    private readonly albumRepository: Repository<AlbumEntity>,
+  ) {}
 
-  findAll(): Album[] {
-    return this.albums.map((album: Album) => ({ ...album }));
+  findAll(): Observable<AlbumEntity[]> {
+    return from(this.albumRepository.find());
   }
 
-  findOne(id: uuid): Album | undefined {
-    return this.albums.find((albom) => albom.id === id);
+  findOne(id: uuid): Observable<AlbumEntity | null> {
+    return from(this.albumRepository.findOne({ where: { id } }));
   }
 
-  create(name: string, year: number, artistId: uuid | null): Album {
-    const album: Album = {
-      id: randomUUID(),
+  create(
+    name: string,
+    year: number,
+    artistId: uuid | null,
+  ): Observable<AlbumEntity> {
+    const album = this.albumRepository.create({
       name,
       year,
       artistId: artistId ?? null,
-    };
-    this.albums.push(album);
-    return { ...album };
-  }
-
-  update(id: uuid, patch: Partial<Album>): Album {
-    const album = this.findOne(id);
-    if (!album) {
-      //TODO
-      throw new NotFoundException('Album not found');
-    }
-
-    Object.assign(album, patch);
-    return { ...album };
-  }
-
-  remove(id: uuid): void {
-    const idx = this.albums.findIndex((album: Album) => album.id === id);
-    if (idx === -1) {
-      throw new NotFoundException('Album not found');
-    }
-
-    this.albums.splice(idx, 1);
-  }
-
-  nullifyArtistReferences(artistId: uuid) {
-    this.albums.forEach((album: Album) => {
-      if (album.artistId === artistId) album.artistId = null;
     });
+
+    return from(this.albumRepository.save(album));
+  }
+
+  update(id: uuid, patch: Partial<AlbumEntity>): Observable<AlbumEntity> {
+    return this.findOne(id).pipe(
+      switchMap((album) => {
+        if (!album) {
+          return throwError(() => new NotFoundException('Album not found'));
+        }
+
+        Object.assign(album, patch);
+        return from(this.albumRepository.save(album));
+      }),
+    );
+  }
+
+  remove(id: uuid): Observable<void> {
+    return from(this.albumRepository.delete(id)).pipe(
+      tap((result) => {
+        if (result.affected === 0) {
+          throw new NotFoundException('Album not found');
+        }
+      }),
+      map(() => undefined),
+    );
+  }
+
+  nullifyArtistReferences(artistId: uuid): Observable<void> {
+    return from(
+      this.albumRepository.update({ artistId }, { artistId: null }),
+    ).pipe(map(() => undefined));
   }
 }
