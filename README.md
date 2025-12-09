@@ -70,3 +70,7 @@ npm run format
 Press <kbd>F5</kbd> to debug.
 
 For more information, visit: https://code.visualstudio.com/docs/editor/debugging
+
+1.just create .env
+2.docker-compose build --no-cache
+3.docker compose up -d 
