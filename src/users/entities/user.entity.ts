@@ -12,7 +12,7 @@ export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
   id: uuid;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, unique: true })
   login: string;
 
   @Column({ type: 'varchar', length: 255 })

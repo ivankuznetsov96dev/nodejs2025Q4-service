@@ -5,6 +5,7 @@ import { Observable, from, map, switchMap, tap, throwError } from 'rxjs';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserEntity } from './entities/user.entity';
 import { uuid } from 'src/shared/types/uuid';
+import * as bcrypt from 'bcrypt';
 
 export type UserResponse = Omit<UserEntity, 'password'>;
 
@@ -64,19 +65,28 @@ export class UsersService {
         if (!user) {
           return throwError(() => new NotFoundException('User not found'));
         }
-        if (user.password !== oldPassword) {
-          return throwError(() => null);
-        }
 
-        user.password = newPassword;
-        user.version += 1;
-        user.updatedAt = Date.now();
+        return from(bcrypt.compare(oldPassword, user.password)).pipe(
+          switchMap((isMatch) => {
+            if (!isMatch) {
+              return throwError(() => null);
+            }
 
-        return from(this.userRepository.save(user)).pipe(
-          map((updatedUser) => {
-            const data = { ...updatedUser };
-            delete data.password;
-            return data;
+            return from(bcrypt.hash(newPassword, 10)).pipe(
+              switchMap((hashedPassword) => {
+                user.password = hashedPassword;
+                user.version += 1;
+                user.updatedAt = Date.now();
+
+                return from(this.userRepository.save(user)).pipe(
+                  map((updatedUser) => {
+                    const data = { ...updatedUser };
+                    delete data.password;
+                    return data;
+                  }),
+                );
+              }),
+            );
           }),
         );
       }),

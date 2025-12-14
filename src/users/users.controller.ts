@@ -12,12 +12,13 @@ import {
   ForbiddenException,
   HttpStatus,
 } from '@nestjs/common';
-import { Observable, of, switchMap, throwError } from 'rxjs';
+import { Observable, of, switchMap, throwError, from } from 'rxjs';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { UsersService, UserResponse } from './users.service';
 import { validate as isUUID } from 'uuid';
 import { uuid } from 'src/shared/types/uuid';
+import * as bcrypt from 'bcrypt';
 
 @Controller('user')
 export class UsersController {
@@ -73,16 +74,21 @@ export class UsersController {
         if (!user) {
           return throwError(() => new NotFoundException('User not found'));
         }
-        if (user.password !== dto.oldPassword) {
-          return throwError(
-            () => new ForbiddenException('Old password mismatch'),
-          );
-        }
 
-        return this.usersService.updatePassword(
-          id,
-          dto.oldPassword,
-          dto.newPassword,
+        return from(bcrypt.compare(dto.oldPassword, user.password)).pipe(
+          switchMap((isMatch) => {
+            if (!isMatch) {
+              return throwError(
+                () => new ForbiddenException('Old password mismatch'),
+              );
+            }
+
+            return this.usersService.updatePassword(
+              id,
+              dto.oldPassword,
+              dto.newPassword,
+            );
+          }),
         );
       }),
     );
