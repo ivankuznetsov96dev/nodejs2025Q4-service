@@ -1,0 +1,45 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:13-alpine
+    container_name: home_library_db
+    restart: always
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - '${POSTGRES_DOCKER_PORT}:5432'
+    volumes:
+      - home_library_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  app:
+    build: .
+    container_name: home_library_app
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - '${PORT}:4000'
+    depends_on:
+      - db
+    environment:
+      POSTGRES_HOST: db
+    volumes:
+      - ./src:/app/src
+    networks:
+      - app-network
+
+volumes:
+  home_library_data:
+    driver: local
+  home_library_app:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

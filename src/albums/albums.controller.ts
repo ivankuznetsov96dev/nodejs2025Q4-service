@@ -11,6 +11,7 @@ import {
   NotFoundException,
   HttpStatus,
 } from '@nestjs/common';
+import { Observable, switchMap, throwError, tap, of } from 'rxjs';
 import { CreateAlbumDto } from './dto/create-album.dto';
 import { UpdateAlbumDto } from './dto/update-album.dto';
 import { AlbumsService } from './albums.service';
@@ -18,7 +19,7 @@ import { TracksService } from '../tracks/tracks.service';
 import { FavoritesService } from '../favorites/favorites.service';
 import { validate as isUUID } from 'uuid';
 import { uuid } from 'src/shared/types/uuid';
-import { Album } from './models/album.interface';
+import { AlbumEntity } from './entities/album.entity';
 
 @Controller('album')
 export class AlbumsController {
@@ -29,28 +30,30 @@ export class AlbumsController {
   ) {}
 
   @Get()
-  getAll(): Album[] {
+  getAll(): Observable<AlbumEntity[]> {
     return this.albumsService.findAll();
   }
 
   @Get(':id')
-  getOne(@Param('id') id: uuid): Album {
+  getOne(@Param('id') id: uuid): Observable<AlbumEntity> {
     if (!isUUID(id)) {
       //TODO
       throw new BadRequestException('Invalid uuid');
     }
-    const album = this.albumsService.findOne(id);
 
-    if (!album) {
-      throw new NotFoundException('Album not found');
-    }
-
-    return album;
+    return this.albumsService.findOne(id).pipe(
+      switchMap((album) => {
+        if (!album) {
+          return throwError(() => new NotFoundException('Album not found'));
+        }
+        return of(album);
+      }),
+    );
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateAlbumDto): Album {
+  create(@Body() dto: CreateAlbumDto): Observable<AlbumEntity> {
     if (!dto || !dto.name || dto.year === undefined) {
       throw new BadRequestException('Missing fields');
     }
@@ -59,24 +62,29 @@ export class AlbumsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: uuid, @Body() dto: UpdateAlbumDto): Album {
+  update(
+    @Param('id') id: uuid,
+    @Body() dto: UpdateAlbumDto,
+  ): Observable<AlbumEntity> {
     if (!isUUID(id)) {
       throw new BadRequestException('Invalid uuid');
     }
 
-    return this.albumsService.update(id, dto as UpdateAlbumDto);
+    return this.albumsService.update(id, dto);
   }
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id: uuid): void {
+  remove(@Param('id') id: uuid): Observable<void> {
     if (!isUUID(id)) {
       throw new BadRequestException('Invalid uuid');
     }
 
-    this.albumsService.remove(id);
-    this.tracksService.nullifyAlbumReferences(id);
-
-    this.favsService.removeAlbumFromAll(id);
+    return this.albumsService.remove(id).pipe(
+      tap(() => {
+        this.tracksService.nullifyAlbumReferences(id).subscribe();
+        this.favsService.removeAlbumFromAll(id).subscribe();
+      }),
+    );
   }
 }

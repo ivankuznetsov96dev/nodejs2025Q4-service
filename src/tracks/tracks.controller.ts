@@ -11,13 +11,14 @@ import {
   NotFoundException,
   HttpStatus,
 } from '@nestjs/common';
+import { Observable, switchMap, throwError, tap, of } from 'rxjs';
 import { CreateTrackDto } from './dto/create-track.dto';
 import { UpdateTrackDto } from './dto/update-track.dto';
 import { TracksService } from './tracks.service';
 import { FavoritesService } from '../favorites/favorites.service';
 import { validate as isUUID } from 'uuid';
 import { uuid } from 'src/shared/types/uuid';
-import { Track } from './models/track.interface';
+import { TrackEntity } from './entities/track.entity';
 
 @Controller('track')
 export class TracksController {
@@ -27,28 +28,30 @@ export class TracksController {
   ) {}
 
   @Get()
-  getAll(): Track[] {
+  getAll(): Observable<TrackEntity[]> {
     return this.tracksService.findAll();
   }
 
   @Get(':id')
-  getOne(@Param('id') id: uuid): Track {
+  getOne(@Param('id') id: uuid): Observable<TrackEntity> {
     if (!isUUID(id)) {
-      //TODO
       throw new BadRequestException('Invalid uuid');
     }
 
-    const track = this.tracksService.findOne(id);
-    if (!track) {
-      throw new NotFoundException('Track not found');
-    }
+    return this.tracksService.findOne(id).pipe(
+      switchMap((track) => {
+        if (!track) {
+          return throwError(() => new NotFoundException('Track not found'));
+        }
 
-    return track;
+        return of(track);
+      }),
+    );
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateTrackDto): Track {
+  create(@Body() dto: CreateTrackDto): Observable<TrackEntity> {
     if (!dto || !dto.name || dto.duration === undefined) {
       throw new BadRequestException('Missing fields');
     }
@@ -62,7 +65,10 @@ export class TracksController {
   }
 
   @Put(':id')
-  update(@Param('id') id: uuid, @Body() dto: UpdateTrackDto): Track {
+  update(
+    @Param('id') id: uuid,
+    @Body() dto: UpdateTrackDto,
+  ): Observable<TrackEntity> {
     if (!isUUID(id)) {
       throw new BadRequestException('Invalid uuid');
     }
@@ -72,12 +78,15 @@ export class TracksController {
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id: uuid) {
+  remove(@Param('id') id: uuid): Observable<void> {
     if (!isUUID(id)) {
       throw new BadRequestException('Invalid uuid');
     }
 
-    this.tracksService.remove(id);
-    this.favsService.removeTrackFromAll(id);
+    return this.tracksService.remove(id).pipe(
+      tap(() => {
+        this.favsService.removeTrackFromAll(id).subscribe();
+      }),
+    );
   }
 }

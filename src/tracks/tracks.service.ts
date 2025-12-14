@@ -1,19 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import { Track } from './models/track.interface';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Observable, from, map, switchMap, tap, throwError } from 'rxjs';
+import { TrackEntity } from './entities/track.entity';
 import { uuid } from 'src/shared/types/uuid';
 
 @Injectable()
 export class TracksService {
-  //TODO
-  private tracks: Track[] = [];
+  constructor(
+    @InjectRepository(TrackEntity)
+    private readonly trackRepository: Repository<TrackEntity>,
+  ) {}
 
-  findAll(): Track[] {
-    return this.tracks.map((track: Track) => ({ ...track }));
+  findAll(): Observable<TrackEntity[]> {
+    return from(this.trackRepository.find());
   }
 
-  findOne(id: uuid): Track | undefined {
-    return this.tracks.find((track: Track) => track.id === id);
+  findOne(id: uuid): Observable<TrackEntity | null> {
+    return from(this.trackRepository.findOne({ where: { id } }));
   }
 
   create(
@@ -21,53 +25,50 @@ export class TracksService {
     duration: number,
     artistId: uuid | null,
     albumId: uuid | null,
-  ): Track {
-    const track: Track = {
-      id: randomUUID(),
+  ): Observable<TrackEntity> {
+    const track = this.trackRepository.create({
       name,
       duration,
       artistId: artistId ?? null,
       albumId: albumId ?? null,
-    };
-
-    this.tracks.push(track);
-    return { ...track };
-  }
-
-  update(id: uuid, patch: Partial<Track>): Track {
-    const track = this.findOne(id);
-
-    if (!track) {
-      throw new NotFoundException('Track not found');
-    }
-
-    Object.assign(track, patch);
-    return { ...track };
-  }
-
-  remove(id: uuid): void {
-    const idx = this.tracks.findIndex((track: Track) => track.id === id);
-
-    if (idx === -1) {
-      throw new NotFoundException('Track not found');
-    }
-
-    this.tracks.splice(idx, 1);
-  }
-
-  nullifyArtistReferences(artistId: uuid): void {
-    this.tracks.forEach((track: Track) => {
-      if (track.artistId === artistId) {
-        track.artistId = null;
-      }
     });
+
+    return from(this.trackRepository.save(track));
   }
 
-  nullifyAlbumReferences(albumId: uuid): void {
-    this.tracks.forEach((track: Track) => {
-      if (track.albumId === albumId) {
-        track.albumId = null;
-      }
-    });
+  update(id: uuid, patch: Partial<TrackEntity>): Observable<TrackEntity> {
+    return this.findOne(id).pipe(
+      switchMap((track) => {
+        if (!track) {
+          return throwError(() => new NotFoundException('Track not found'));
+        }
+
+        Object.assign(track, patch);
+        return from(this.trackRepository.save(track));
+      }),
+    );
+  }
+
+  remove(id: uuid): Observable<void> {
+    return from(this.trackRepository.delete(id)).pipe(
+      tap((result) => {
+        if (result.affected === 0) {
+          throw new NotFoundException('Track not found');
+        }
+      }),
+      map(() => undefined),
+    );
+  }
+
+  nullifyArtistReferences(artistId: uuid): Observable<void> {
+    return from(
+      this.trackRepository.update({ artistId }, { artistId: null }),
+    ).pipe(map(() => undefined));
+  }
+
+  nullifyAlbumReferences(albumId: uuid): Observable<void> {
+    return from(
+      this.trackRepository.update({ albumId }, { albumId: null }),
+    ).pipe(map(() => undefined));
   }
 }

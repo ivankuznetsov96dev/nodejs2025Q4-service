@@ -12,93 +12,89 @@ import {
   ForbiddenException,
   HttpStatus,
 } from '@nestjs/common';
+import { Observable, of, switchMap, throwError } from 'rxjs';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
-import { UsersService } from './users.service';
+import { UsersService, UserResponse } from './users.service';
 import { validate as isUUID } from 'uuid';
 import { uuid } from 'src/shared/types/uuid';
-import { User } from './models/user.interface';
 
 @Controller('user')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  getAll(): Omit<User, 'password'>[] {
+  getAll(): Observable<UserResponse[]> {
     return this.usersService.findAll();
   }
 
   @Get(':id')
-  getOne(@Param('id') id: uuid): Omit<User, 'password'> {
+  getOne(@Param('id') id: uuid): Observable<UserResponse> {
     if (!isUUID(id)) {
-      //TODO: replace with custom error class in next task
       throw new BadRequestException('Invalid uuid');
     }
 
-    const user = this.usersService.findOne(id);
-
-    if (!user) {
-      //TODO
-      throw new NotFoundException('User not found');
-    }
-    const data = { ...user };
-    delete data.password;
-    return data;
+    return this.usersService.findOne(id).pipe(
+      switchMap((user) => {
+        if (!user) {
+          return throwError(() => new NotFoundException('User not found'));
+        }
+        const data = { ...user };
+        delete data.password;
+        return of(data);
+      }),
+    );
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateUserDto): Omit<User, 'password'> {
+  create(@Body() dto: CreateUserDto): Observable<UserResponse> {
     if (!dto || !dto.login || !dto.password) {
-      //TODO
       throw new BadRequestException('Missing fields');
     }
 
-    const user = this.usersService.create(dto);
-
-    const data = { ...user };
-    delete data.password;
-    return data;
+    return this.usersService.create(dto);
   }
 
   @Put(':id')
   updatePassword(
     @Param('id') id: uuid,
     @Body() dto: UpdatePasswordDto,
-  ): Omit<User, 'password'> {
+  ): Observable<UserResponse> {
     if (!isUUID(id)) {
-      //TODO!
       throw new BadRequestException('Invalid uuid');
     }
     if (!dto || !dto.oldPassword || !dto.newPassword) {
       throw new BadRequestException('Missing fields');
     }
 
-    const user = this.usersService.findOne(id);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-    if (user.password !== dto.oldPassword) {
-      throw new ForbiddenException('Old password mismatch');
-    }
+    return this.usersService.findOne(id).pipe(
+      switchMap((user) => {
+        if (!user) {
+          return throwError(() => new NotFoundException('User not found'));
+        }
+        if (user.password !== dto.oldPassword) {
+          return throwError(
+            () => new ForbiddenException('Old password mismatch'),
+          );
+        }
 
-    const updated = this.usersService.updatePassword(
-      id,
-      dto.oldPassword,
-      dto.newPassword,
+        return this.usersService.updatePassword(
+          id,
+          dto.oldPassword,
+          dto.newPassword,
+        );
+      }),
     );
-
-    return updated;
   }
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id: uuid): void {
+  remove(@Param('id') id: uuid): Observable<void> {
     if (!isUUID(id)) {
-      //TODO
       throw new BadRequestException('Invalid uuid');
     }
 
-    this.usersService.remove(id);
+    return this.usersService.remove(id);
   }
 }

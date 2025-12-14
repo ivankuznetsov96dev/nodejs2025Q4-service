@@ -11,6 +11,7 @@ import {
   NotFoundException,
   HttpStatus,
 } from '@nestjs/common';
+import { Observable, switchMap, throwError, tap, of } from 'rxjs';
 import { CreateArtistDto } from './dto/create-artist.dto';
 import { UpdateArtistDto } from './dto/update-artist.dto';
 import { ArtistsService } from './artists.service';
@@ -19,6 +20,7 @@ import { AlbumsService } from '../albums/albums.service';
 import { TracksService } from '../tracks/tracks.service';
 import { FavoritesService } from '../favorites/favorites.service';
 import { uuid } from 'src/shared/types/uuid';
+import { ArtistEntity } from './entities/artist.entity';
 
 @Controller('artist')
 export class ArtistsController {
@@ -30,21 +32,30 @@ export class ArtistsController {
   ) {}
 
   @Get()
-  getAll() {
+  getAll(): Observable<ArtistEntity[]> {
     return this.artistsService.findAll();
   }
 
   @Get(':id')
-  getOne(@Param('id') id: uuid) {
-    if (!isUUID(id)) throw new BadRequestException('Invalid uuid');
-    const artist = this.artistsService.findOne(id);
-    if (!artist) throw new NotFoundException('Artist not found');
-    return artist;
+  getOne(@Param('id') id: uuid): Observable<ArtistEntity> {
+    if (!isUUID(id)) {
+      throw new BadRequestException('Invalid uuid');
+    }
+
+    return this.artistsService.findOne(id).pipe(
+      switchMap((artist) => {
+        if (!artist) {
+          return throwError(() => new NotFoundException('Artist not found'));
+        }
+
+        return of(artist);
+      }),
+    );
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateArtistDto) {
+  create(@Body() dto: CreateArtistDto): Observable<ArtistEntity> {
     if (!dto || !dto.name || dto.grammy === undefined) {
       throw new BadRequestException('Missing fields');
     }
@@ -53,7 +64,10 @@ export class ArtistsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: uuid, @Body() dto: UpdateArtistDto) {
+  update(
+    @Param('id') id: uuid,
+    @Body() dto: UpdateArtistDto,
+  ): Observable<ArtistEntity> {
     if (!isUUID(id)) {
       throw new BadRequestException('Invalid uuid');
     }
@@ -63,14 +77,17 @@ export class ArtistsController {
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id: uuid) {
+  remove(@Param('id') id: uuid): Observable<void> {
     if (!isUUID(id)) {
       throw new BadRequestException('Invalid uuid');
     }
-    this.artistsService.remove(id);
 
-    this.albumsService.nullifyArtistReferences(id);
-    this.tracksService.nullifyArtistReferences(id);
-    this.favsService.removeArtistFromAll(id);
+    return this.artistsService.remove(id).pipe(
+      tap(() => {
+        this.albumsService.nullifyArtistReferences(id).subscribe();
+        this.tracksService.nullifyArtistReferences(id).subscribe();
+        this.favsService.removeArtistFromAll(id).subscribe();
+      }),
+    );
   }
 }
